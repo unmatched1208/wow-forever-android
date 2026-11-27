@@ -38,7 +38,11 @@ android {
     }
 
     defaultConfig {
-        applicationId = "app.wowforever"
+        // -PappIdSuffix=.framegen builds a copy that installs next to the official app.
+        val appIdSuffix = (project.findProperty("appIdSuffix") as String?).orEmpty()
+        applicationId = "app.wowforever$appIdSuffix"
+        manifestPlaceholders["appLabel"] =
+            (project.findProperty("appLabel") as String?) ?: "@string/app_name"
 
         minSdk = 26
 
