@@ -1,5 +1,7 @@
 # WoW Forever for Android
 
+> **This is the "WoW Forever FG" fork** of [jaredgei/wow-forever-android](https://github.com/jaredgei/wow-forever-android) with Lossless Scaling frame generation added (see *Frame generation* below). It installs **next to** the official app as a separate app, "WoW Forever FG", with its own login and settings; it can use the same game folder. Get the APK from this fork's [Releases](https://github.com/unmatched1208/wow-forever-android/releases); it is rebuilt automatically when upstream publishes a new version. Report frame-generation problems here, not upstream.
+
 Play **World of Warcraft: Forever** on Snapdragon Android handhelds as a normal Android app. You tap the icon, press Play, and the game runs.
 
 This uses Blizzard's own **Windows ARM64** WoW client, so the game itself runs natively on the phone's CPU. Wine translates the Windows calls, and DXVK plus a patched Turnip Vulkan driver render the game on the Adreno GPU. Nothing is emulated as x86.

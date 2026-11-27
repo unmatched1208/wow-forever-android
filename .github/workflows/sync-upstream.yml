@@ -1,0 +1,75 @@
+# Keeps this fork in step with jaredgei/wow-forever-android: merges upstream main into main, and when upstream has
+# published a release that this fork has not built yet, starts release.yml for it (tag v<version>-fg).
+#
+# Runs daily and by hand. A merge conflict stops the run with an error; resolve it locally and push, then rerun.
+#
+# Optional secret SYNC_TOKEN: a fine-grained personal access token for this repository with "Contents: write" and
+# "Workflows: write". GitHub refuses pushes that change files under .github/workflows with the built-in token, so
+# without SYNC_TOKEN an upstream change to a workflow file stops the sync until it is merged by hand.
+name: Sync upstream
+
+on:
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+env:
+  UPSTREAM: jaredgei/wow-forever-android
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.SYNC_TOKEN || github.token }}
+
+      - name: Merge upstream main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream "https://github.com/$UPSTREAM.git"
+          git fetch --no-tags upstream main
+          if git merge-base --is-ancestor upstream/main HEAD; then
+            echo "Already up to date with $UPSTREAM."
+            exit 0
+          fi
+          if ! git merge --no-edit -m "Merge $UPSTREAM main" upstream/main; then
+            git merge --abort
+            echo "::error::Merging $UPSTREAM main conflicts. Merge it locally, push, then rerun this workflow."
+            exit 1
+          fi
+          git push origin main
+
+      - name: Build the latest upstream release if it is new
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          upstream_tag=$(gh api "repos/$UPSTREAM/releases/latest" --jq .tag_name)
+          version=$(sed -n 's/^ *versionName = "\(.*\)"/\1/p' app/build.gradle.kts)
+          echo "Upstream latest release: $upstream_tag, main is at versionName $version"
+          if [ "$upstream_tag" != "v$version" ]; then
+            echo "main is not at the upstream release version yet; nothing to build."
+            exit 0
+          fi
+          tag="v$version-fg"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "$tag already exists."
+            exit 0
+          fi
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f tag="$tag" \
+            -f notes="WoW Forever $upstream_tag with Lossless Scaling frame generation. Installs next to the official app as \"WoW Forever FG\". Needs your own Lossless.dll (see README)." \
+            -f prerelease=false
+          echo "Started release.yml for $tag."

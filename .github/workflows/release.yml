@@ -1,8 +1,11 @@
-# Builds the release APK, signs it with the release key from the repository's Actions secrets, and publishes it as a
-# GitHub release. Run by hand (Actions tab, or the API) only; nothing triggers it automatically.
+# Builds the "WoW Forever FG" APK (frame generation, installs next to the official app), signs it with the release key
+# from the repository's Actions secrets, and publishes it as a GitHub release. Run by hand (Actions tab, or the API),
+# or by sync-upstream.yml when jaredgei/wow-forever-android publishes a new release.
+#
+# Tags are the upstream version plus "-fg", e.g. v2.4.7-fg (or v2.4.7-fg2 for a rebuild of the same version).
 #
 # The build uses the commit the workflow runs from: pick the branch in "Use workflow from" (the API's "ref"). Its build
-# provenance attestation records that commit, so `gh attestation verify WoW-Forever.apk --repo <this repo>` shows which
+# provenance attestation records that commit, so `gh attestation verify WoW-Forever-FG.apk --repo <this repo>` shows which
 # commit and workflow made an APK (#98).
 #
 # Secrets (Settings > Secrets and variables > Actions):
@@ -16,10 +19,10 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag to create, e.g. v2.4.2 or v2.4.1-test1
+        description: Release tag to create, e.g. v2.4.7-fg or v2.4.7-fg2
         required: true
       title:
-        description: Release title (defaults to "WoW Forever for Android <tag>")
+        description: Release title (defaults to "WoW Forever FG <tag>")
         required: false
       notes:
         description: Release notes (Markdown)
@@ -63,10 +66,13 @@ jobs:
           TAG: ${{ inputs.tag }}
         run: |
           version=$(sed -n 's/^ *versionName = "\(.*\)"/\1/p' app/build.gradle.kts)
-          if [ "v$version" != "$TAG" ]; then
-            echo "::error::versionName is $version but the tag is $TAG"
-            exit 1
-          fi
+          case "$TAG" in
+            "v$version-fg" | "v$version-fg"[0-9]*) ;;
+            *)
+              echo "::error::versionName is $version but the tag is $TAG (expected v$version-fg or v$version-fgN)"
+              exit 1
+              ;;
+          esac
 
       - name: Fetch bundled components
         run: tools/fetch_components.sh
@@ -115,14 +121,15 @@ jobs:
           } > app/keystores/keystore.properties
 
       - name: Build
-        run: ./gradlew --no-daemon :app:assembleModernRelease
+        # A separate package (app.wowforever.framegen) so it installs next to the official app.
+        run: ./gradlew --no-daemon -PappIdSuffix=.framegen "-PappLabel=WoW Forever FG" :app:assembleModernRelease
 
       - name: Verify the signature
         run: |
           apk=app/build/outputs/apk/modern/release/app-modern-release.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk" | tee certs.txt
           if grep -q "CN=Android Debug" certs.txt; then echo "::error::APK is debug-signed"; exit 1; fi
-          cp "$apk" WoW-Forever.apk
+          cp "$apk" WoW-Forever-FG.apk
 
       - name: Remove signing files
         if: always()
@@ -132,7 +139,7 @@ jobs:
       - name: Attest the build provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-path: WoW-Forever.apk
+          subject-path: WoW-Forever-FG.apk
 
       - name: Publish the release
         env:
@@ -145,8 +152,8 @@ jobs:
           sha=$(git rev-parse HEAD)
           flags=()
           if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); else flags+=(--latest); fi
-          gh release create "$TAG" WoW-Forever.apk \
+          gh release create "$TAG" WoW-Forever-FG.apk \
             --target "$sha" \
-            --title "${TITLE:-WoW Forever for Android $TAG}" \
+            --title "${TITLE:-WoW Forever FG $TAG}" \
             --notes "${NOTES:-}" \
             "${flags[@]}"
