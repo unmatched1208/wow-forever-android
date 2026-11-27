@@ -132,6 +132,8 @@ fun WoWForeverScreen(
     var isImportingFrameGen by remember { mutableStateOf(false) }
 
     suspend fun fetchAppUpdate(): AppUpdater.Release? {
+        // Official releases are a different app than a side-by-side build (-PappIdSuffix); offering them would install the original instead.
+        if (BuildConfig.APPLICATION_ID != "app.wowforever") return null
         val release = AppUpdater.check()
         appUpdate = release
         if (release != null) {
@@ -1378,7 +1380,7 @@ private fun containerConfig(gameRoot: File, gpu: GpuProfile, screenSize: String,
         put("wineVersion", "$PROTON_VERSION-1")
         put("containerVariant", "bionic")
         put("fexcoreVersion", "2609-0")
-        put("drives", "D:/storage/emulated/0/DownloadE:/data/data/app.wowforever/storageG:${gameRoot.path}")
+        put("drives", "D:/storage/emulated/0/DownloadE:${Container.DATA_DIR}/storageG:${gameRoot.path}")
         put("executablePath", "G:\\$FLAVOR_DIR\\$EXE_NAME")
         put("execArgs", "-d3d11")
         put("showFPS", true)
